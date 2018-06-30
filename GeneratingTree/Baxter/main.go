@@ -1,5 +1,4 @@
-// Plane permutations are those which avoid the pattern 213'54
-// Avoiding 213'54 is equivalent to avoiding 2-14-3
+// Baxter permutations are those which avoid the patterns 2-41-3 and 3-14-2 
 // This generating tree based enumeration is based on the following paper:
 // https://arxiv.org/pdf/1702.04529.pdf
 
@@ -130,14 +129,50 @@ func min(a, b int) int {
 	return b
 }
 
-func isPlane(perm Perm) bool {
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func isBaxter(perm Perm) bool {
 
 	for k := 0; k < len(perm)-1; k++ {
+
+		two, three := 1000, 0
+
 		if perm[k] < perm[k+1]-2 {
+
+			// Memorise -14-
 			m, M := perm[k], perm[k+1]
-			two := 1000
 			prefix, suffix := perm[:k], perm[k+2:]
 
+			two = 1000
+			three = 0
+
+			//Avoid 3-14-2
+			for _, k := range prefix {
+				if (k > m + 1) && (k < M) {
+					three = max(k, three)
+				}
+			}
+
+			for _, k := range suffix {
+				if (k < three) && (k > m){
+					two = k
+					return false
+				}
+			}
+		}
+
+		if perm[k] > perm[k+1]+2 {
+
+			// Memorise -41-
+			m, M:= perm[k+1], perm[k]
+			prefix, suffix := perm[:k], perm[k+2:]
+
+			// Avoid 2-14-3
 			for _, k := range prefix {
 				if k > m && k < M-1 {
 					two = min(k, two)
@@ -146,6 +181,7 @@ func isPlane(perm Perm) bool {
 
 			for _, k := range suffix {
 				if k > two && k < M {
+					three = k
 					return false
 				}
 			}
@@ -153,6 +189,39 @@ func isPlane(perm Perm) bool {
 	}
 
 	return true
+}
+
+func addRange(stack *[][2]int, r [2]int) (){
+	s := *stack
+	n := len(s)
+	if n==0 {
+		*stack = append(s, r)
+		return
+	}
+	
+	top := s[n-1]
+	if r[0]>top[1]+1 || top[0]>r[1]+1 {
+		*stack = append(s, r)
+		return
+	} else {
+		*stack = s[:n-1]
+		r_new := [2]int{min(r[0], top[0]), max(r[1], top[1])}
+		addRange(stack, r_new)
+	}
+}
+
+func isSeperable(perm Perm) bool {
+    var stack [][2]int
+    for _, p := range perm {
+    	r := [2]int{p, p}
+    	addRange(&stack, r)
+    }
+
+    if len(stack)==1 {
+    	return true
+    }
+    return false
+
 }
 
 func initCurLevel(s *Set) {
@@ -167,7 +236,7 @@ func initCurLevel(s *Set) {
 	for _, perm := range p.Values() {
 		for a:=1; a<=4; a++ {
 			newPerm := localExp(perm, a)
-			if isPlane(newPerm) {
+			if isBaxter(newPerm) {
 				s.Add(newPerm)
 			}
 		}
@@ -224,10 +293,12 @@ func worker(perm Perm, level int, wg *sync.WaitGroup) {
 	}
 	for a := 1; a <= level+1; a++ {
 		newPerm := localExp(perm, a)
-		if isPlane(newPerm) {
-			lock.Lock()
-			levelPermCount[level+1]++
-			lock.Unlock()
+		if isBaxter(newPerm) {
+			if !isSeperable(newPerm) {
+				lock.Lock()
+				levelPermCount[level+1]++
+				lock.Unlock()
+			}
 			worker(newPerm, level+1, wg)
 		}
 	}
